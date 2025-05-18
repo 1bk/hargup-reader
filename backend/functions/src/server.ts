@@ -1,4 +1,4 @@
-import "reflect-metadata"
+import 'reflect-metadata';
 import express from 'express';
 import { container } from 'tsyringe';
 import { CrawlerHost } from './cloud-functions/crawler';
@@ -11,6 +11,11 @@ container.registerSingleton(CrawlerHost);
 const crawlerHost = container.resolve(CrawlerHost);
 
 app.use(express.json());
+
+// Handle favicon requests
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end(); // No content response
+});
 
 // Example curl for /crawl:
 // curl -X GET "http://localhost:3000/https://example.com"
