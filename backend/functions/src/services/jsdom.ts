@@ -37,7 +37,7 @@ export class JSDomControl extends AsyncService {
         }
         const t0 = Date.now();
         const jsdom = new JSDOM(snapshot.html, { url: snapshot.href, virtualConsole });
-        const allNodes: Node[] = [];
+        const allNodes: TurndownService.Node[] = [];
         jsdom.window.document.querySelectorAll('svg').forEach((x) => x.innerHTML = '');
         if (options?.withIframe) {
             jsdom.window.document.querySelectorAll('iframe[src],frame[src]').forEach((x) => {
@@ -67,19 +67,19 @@ export class JSDomControl extends AsyncService {
         if (Array.isArray(options?.targetSelector)) {
             for (const x of options!.targetSelector.map((x) => jsdom.window.document.querySelectorAll(x))) {
                 x.forEach((el) => {
-                    if (!allNodes.includes(el)) {
-                        allNodes.push(el);
+                    if (!allNodes.includes(el as unknown as TurndownService.Node)) {
+                        allNodes.push(el as unknown as TurndownService.Node);
                     }
                 });
             }
         } else if (options?.targetSelector) {
             jsdom.window.document.querySelectorAll(options.targetSelector).forEach((el) => {
-                if (!allNodes.includes(el)) {
-                    allNodes.push(el);
+                if (!allNodes.includes(el as unknown as TurndownService.Node)) {
+                    allNodes.push(el as unknown as TurndownService.Node);
                 }
             });
         } else {
-            allNodes.push(jsdom.window.document);
+            allNodes.push(jsdom.window.document as unknown as TurndownService.Node);
         }
 
         if (!allNodes.length) {

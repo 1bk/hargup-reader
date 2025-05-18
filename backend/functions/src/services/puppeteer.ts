@@ -256,7 +256,15 @@ export class PuppeteerControl extends AsyncService {
             }
         }
         this.browser = await puppeteer.launch({
-            timeout: 10_000
+            timeout: 10_000,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                // The following might also be helpful in some environments,
+                // though not strictly necessary for the sandbox issue.
+                // '--disable-dev-shm-usage', // overcome limited resource problems
+                // '--disable-gpu', // if you don't need GPU hardware acceleration
+            ]
         }).catch((err: any) => {
             this.logger.error(`Unknown firebase issue, just die fast.`, { err });
             process.nextTick(() => {
@@ -345,10 +353,27 @@ export class PuppeteerControl extends AsyncService {
             t0 ??= Date.now();
             const requestUrl = req.url();
             if (!requestUrl.startsWith("http:") && !requestUrl.startsWith("https:") && requestUrl !== 'about:blank') {
+                // For non-http(s) and non-about:blank URLs, we can't and shouldn't parse TLD
                 return req.abort('blockedbyclient', 1000);
             }
-            const tldParsed = tldExtract(requestUrl);
-            domainSet.add(tldParsed.domain);
+
+            try {
+                // Attempt to parse the TLD
+                const tldParsed = tldExtract(requestUrl);
+                if (tldParsed && tldParsed.domain) { // Ensure tldParsed and tldParsed.domain are not null/undefined
+                    domainSet.add(tldParsed.domain);
+                } else if (requestUrl !== 'about:blank') {
+                    // Log if it's a somewhat valid http(s) URL but tldExtract failed to get a domain
+                    this.logger.warn(`Could not extract TLD or domain from URL: ${requestUrl}`);
+                }
+            } catch (tldError: any) {
+                // Log the error from tldExtract but don't crash the application
+                this.logger.warn(`tld-extract failed for URL: ${requestUrl} - Error: ${tldError.message}`);
+                // Depending on your policy, you might still want to check other abuse conditions
+                // or simply allow the request if the TLD check isn't critical for this specific URL.
+                // For now, we'll let it proceed to other checks or continue.
+            }
+
 
             const parsedUrl = new URL(requestUrl);
 
@@ -366,8 +391,8 @@ export class PuppeteerControl extends AsyncService {
                 return req.abort('blockedbyclient', 1000);
             }
 
-            const dt = Math.ceil((Date.now() - t0) / 1000);
-            const rps = reqCounter / dt;
+            const dt = Math.ceil((Date.now() - (t0 || Date.now())) / 1000); // Ensure t0 is initialized
+            const rps = reqCounter / (dt > 0 ? dt : 1); // Avoid division by zero if dt is 0
             // console.log(`rps: ${rps}`);
 
             if (reqCounter > 1000) {
@@ -388,9 +413,14 @@ export class PuppeteerControl extends AsyncService {
 
             const continueArgs = req.continueRequestOverrides
                 ? [req.continueRequestOverrides(), 0] as const
-                : [];
+                : [undefined, undefined] as const; // Provide undefined if no overrides
 
-            return req.continue(continueArgs[0], continueArgs[1]);
+
+            // Ensure continueArgs[0] is an object or undefined
+            const overrides = typeof continueArgs[0] === 'object' ? continueArgs[0] : undefined;
+            const priority = typeof continueArgs[1] === 'number' ? continueArgs[1] : undefined;
+
+            return req.continue(overrides, priority);
         });
 
         await page.evaluateOnNewDocument(`
